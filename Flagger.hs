@@ -69,11 +69,12 @@ partitionWith as bs = foldl (\(l, r) (b, f) ->
                                  then (f : l, r)
                                  else (l, f : r)) ([], []) $ zip as bs
 
-withAccept :: (MonadIO m) => Socket -> ((Handle, HostName, PortNumber) -> m a) -> m ()
+withAccept :: MonadIO m => Socket -> ((Handle, HostName, PortNumber) -> m b) -> m b
 withAccept s ma = do
   x@(h, _host, _port) <- liftIO $ accept s
-  ma x
+  r <- ma x
   liftIO $ hFlush h >> hClose h
+  return r
 
 monitor :: PortNumber -> TVar Stats -> TVar [Flag] -> F ()
 monitor p tvStats tvFlags = do
