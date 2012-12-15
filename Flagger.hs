@@ -7,6 +7,7 @@ import Log
 import F
 
 import SocketProducer
+import RawSocketProducer
 
 import Network
 import Control.Monad.Reader
@@ -19,13 +20,16 @@ import System.Exit
 import System.Console.CmdArgs
 import Data.Maybe
 
-_SOCKET_PORT :: PortNumber
-_SOCKET_PORT = 7777
 _MONITOR_PORT :: PortNumber
 _MONITOR_PORT = 7776
+_SOCKET_PORT :: PortNumber
+_SOCKET_PORT = 7777
+_RAW_SOCKET_PORT :: PortNumber
+_RAW_SOCKET_PORT = 7778
 
 producers :: [FlagProducer]
-producers = [socketProducer _SOCKET_PORT]
+producers = [ socketProducer _SOCKET_PORT
+            , rawSocketProducer _RAW_SOCKET_PORT]
 
 flagger :: String -> ([Flag] -> IO (Maybe [Bool])) -> IO ()
 flagger regexp submit = do
