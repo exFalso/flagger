@@ -72,9 +72,11 @@ monitor p tvStats tvFlags = do
   forever $ do
     (h, n, _) <- liftIO $ accept s
     logI $ "Connection from " ++ n
-    stats <- liftIO . atomically $ readTVar tvStats
-    flags <- liftIO . atomically $ readTVar tvFlags
-    liftIO $ hPutStr h (show (length flags, stats)) >> hFlush h
+    liftIO $ do
+      stats <- atomically $ readTVar tvStats
+      flags <- atomically $ readTVar tvFlags
+      hPutStr h (show (length flags, stats) ++ "\n")
+      hFlush h >> hClose h
 
 ticker :: ([Flag] -> IO (Maybe [Bool])) -> Config -> TVar [Flag] -> F ()
 ticker submit Config { interval, timeout, wflagFile, rflagFile } tvar
