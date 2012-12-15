@@ -40,7 +40,7 @@ flagger regexp submit = do
                          , rflagFile = "flagger.rflag" &= help "right flags file"
                          , iflagFile = "flagger.iflag" &= help "invalid flags file"
                          } &= summary "Flagger"
-  
+
   config <- cmdArgs configCmd
 
   tvarStats <- newTVarIO $ Stats 0 0 0
@@ -69,16 +69,22 @@ partitionWith as bs = foldl (\(l, r) (b, f) ->
                                  then (f : l, r)
                                  else (l, f : r)) ([], []) $ zip as bs
 
+withAccept :: (MonadIO m) => Socket -> ((Handle, HostName, PortNumber) -> m a) -> m ()
+withAccept s ma = do
+  x@(h, _host, _port) <- liftIO $ accept s
+  ma x
+  liftIO $ hFlush h >> hClose h
+
 monitor :: PortNumber -> TVar Stats -> TVar [Flag] -> F ()
 monitor p tvStats tvFlags = do
   logI $ "Monitoring on port " ++ show p
   s <- liftIO $ listenOn (PortNumber p)
-  forever $ do
-    (h, n, _) <- liftIO $ accept s
+  forever $ withAccept s $ \(h, n, _) -> do
     logI $ "Connection from " ++ n
-    stats <- liftIO . atomically $ readTVar tvStats
-    flags <- liftIO . atomically $ readTVar tvFlags
-    liftIO $ hPutStr h (show (length flags, stats)) >> hFlush h
+    liftIO $ do
+      stats <- atomically $ readTVar tvStats
+      flags <- atomically $ readTVar tvFlags
+      hPutStr h (show (length flags, stats) ++ "\n")
 
 ticker :: ([Flag] -> IO (Maybe [Bool])) -> Config -> TVar [Flag] -> F ()
 ticker submit Config { interval, timeout, wflagFile, rflagFile } tvar
@@ -89,8 +95,8 @@ ticker submit Config { interval, timeout, wflagFile, rflagFile } tvar
     flags <- liftIO . atomically $ do
                fs <- readTVar tvar
                if null fs
-               then retry
-               else writeTVar tvar [] >> return fs
+                 then retry
+                 else writeTVar tvar [] >> return fs
     bvar <- liftIO $ registerDelay interval
     let nflags = length flags
     logI $ "Submitting " ++ show nflags ++ " flags"
@@ -101,19 +107,19 @@ ticker submit Config { interval, timeout, wflagFile, rflagFile } tvar
       Just Nothing -> return ()
       Just (Just bs) -> do
                if length bs /= nflags
-               then logE $ "Submission function incorrect, returned list with " ++
-                    show (length bs) ++ " elements instead of " ++ show nflags
-               else do
-                 let (af, naf) = partitionWith bs flags
+                 then logE $ "Submission function incorrect, returned list with " ++
+                      show (length bs) ++ " elements instead of " ++ show nflags
+                 else do
+                   let (af, naf) = partitionWith bs flags
 
-                 when (naf /= []) $ do
-                      logE $ show (length naf) ++ " flags not accepted"
-                      liftIO . hPutStr wfh $ concatMap ((++ "\n") . show) af
-                           
-                 when (af /= []) $ do
-                      logS $ show (length af) ++ " flags successfully submitted"
-                      liftIO . hPutStr rfh $ concatMap ((++ "\n") . show) naf
-                             
+                   when (naf /= []) $ do
+                        logE $ show (length naf) ++ " flags not accepted"
+                        liftIO . hPutStr wfh $ concatMap ((++ "\n") . show) af
+
+                   when (af /= []) $ do
+                        logS $ show (length af) ++ " flags successfully submitted"
+                        liftIO . hPutStr rfh $ concatMap ((++ "\n") . show) naf
+
     liftIO . atomically $ readTVar bvar >>= \b -> if b then return () else retry
 
 listener :: String -> Config -> TVar [Flag] -> [FlagProducer] -> F ()
